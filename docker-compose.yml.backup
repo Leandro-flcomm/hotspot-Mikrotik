@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: hotspot-backend
+    restart: unless-stopped
+    volumes:
+      - ./instance:/app/instance
+      - ./logs:/app/logs
+    ports:
+      - "5000:5000"
+    environment:
+      - MIKROTIK_HOST=${MIKROTIK_HOST:-10.199.0.3}
+      - MIKROTIK_USER=${MIKROTIK_USER:-API1}
+      - MIKROTIK_PASSWORD=${MIKROTIK_PASSWORD:-Blocked@@99}
+    networks:
+      - hotspot-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: hotspot-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      # Substitua SEU_IP_PUBLICO pelo IP público real do backend
+      - NEXT_PUBLIC_API_URL=http://45.237.68.24:5000
+    depends_on:
+      - backend
+    networks:
+      - hotspot-network
+
+networks:
+  hotspot-network:
+    driver: bridge

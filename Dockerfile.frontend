@@ -1,0 +1,47 @@
+FROM node:20-alpine AS base
+
+# Instalar dependências necessárias
+RUN apk add --no-cache libc6-compat
+
+# Diretório de trabalho
+WORKDIR /app
+
+# Instalar pnpm globalmente
+RUN npm install -g pnpm
+
+# Copiar arquivos de configuração
+COPY package.json ./
+COPY tsconfig.json ./
+COPY next.config.mjs ./
+COPY tailwind.config.ts ./
+COPY postcss.config.mjs ./
+
+# Instalar dependências
+RUN pnpm install
+
+# Instalar shadcn/ui e componentes
+RUN pnpm add @radix-ui/react-icons lucide-react tailwindcss-animate class-variance-authority clsx tailwind-merge
+RUN mkdir -p components/ui
+
+# Copiar o restante dos arquivos
+COPY . .
+
+# Construir a aplicação
+RUN pnpm run build
+
+# Imagem de produção
+FROM node:20-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+
+# Copiar arquivos necessários
+COPY --from=base /app/public ./public
+COPY --from=base /app/.next/standalone ./
+COPY --from=base /app/.next/static ./.next/static
+
+# Expor porta
+EXPOSE 3000
+
+# Comando para iniciar a aplicação
+CMD ["node", "server.js"]

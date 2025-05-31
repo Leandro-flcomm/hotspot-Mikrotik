@@ -1,0 +1,692 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-controls mb-4">
+  <button id="customize-dashboard" class="btn">
+    <i class="bi bi-grid"></i> Personalizar Dashboard
+  </button>
+  <button id="save-layout" class="btn" style="display: none;">
+    <i class="bi bi-save"></i> Salvar Layout
+  </button>
+  <button id="reset-layout" class="btn btn-outline-danger" style="display: none;">
+    <i class="bi bi-arrow-counterclockwise"></i> Restaurar Padrão
+  </button>
+</div>
+
+<div class="row mb-4 fade-in">
+  <!-- Botão para atualizar dados históricos (apenas para administradores) -->
+  {% if session.role == 'admin' %}
+  <div class="col-12 mb-3">
+      <a href="{{ url_for('update_historical_data') }}" class="btn" style="width: auto;">
+          <i class="bi bi-arrow-repeat"></i> Atualizar Dados Históricos
+      </a>
+      <small class="text-muted ml-2">Isso irá buscar e contabilizar sessões anteriores do MikroTik.</small>
+  </div>
+  {% endif %}
+  
+  <!-- Cards de estatísticas -->
+  <div class="col-md-3 dashboard-widget" data-widget-id="online-users">
+      <div class="stats-card">
+          <div class="stats-icon">
+              <i class="bi bi-people-fill"></i>
+          </div>
+          <div class="stats-details">
+              <div class="stats-title">Usuários Online</div>
+              <div class="stats-value">{{ online_count }}</div>
+          </div>
+          <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+      </div>
+  </div>
+  
+  <div class="col-md-3 dashboard-widget" data-widget-id="total-users">
+      <div class="stats-card">
+          <div class="stats-icon success">
+              <i class="bi bi-person-badge"></i>
+          </div>
+          <div class="stats-details">
+              <div class="stats-title">Total de Usuários</div>
+              <div class="stats-value">{{ total_users }}</div>
+          </div>
+          <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+      </div>
+  </div>
+  
+  <div class="col-md-3 dashboard-widget" data-widget-id="today-usage">
+      <div class="stats-card">
+          <div class="stats-icon info">
+              <i class="bi bi-cloud-download"></i>
+          </div>
+          <div class="stats-details">
+              <div class="stats-title">Consumo Hoje</div>
+              <div class="stats-value">{{ total_today }} GB</div>
+          </div>
+          <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+      </div>
+  </div>
+
+  <div class="col-md-3 dashboard-widget" data-widget-id="month-usage">
+      <div class="stats-card">
+          <div class="stats-icon warning">
+              <i class="bi bi-calendar-month"></i>
+          </div>
+          <div class="stats-details">
+              <div class="stats-title">Consumo do Mês</div>
+              <div class="stats-value">{{ total_month }} GB</div>
+          </div>
+          <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+      </div>
+  </div>
+  
+  <div class="col-md-3 dashboard-widget" data-widget-id="connection-status">
+      <div class="stats-card">
+          <div class="stats-icon warning">
+              <i class="bi bi-wifi"></i>
+          </div>
+          <div class="stats-details">
+              <div class="stats-title">Status da Conexão</div>
+              <div class="stats-value">Ativo</div>
+          </div>
+          <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+      </div>
+  </div>
+</div>
+
+<div class="row mb-4 fade-in dashboard-widget" data-widget-id="online-users-table" style="animation-delay: 0.1s;">
+  <div class="col-12">
+      <div class="card">
+          <div class="card-header bg-primary">
+              <h5><i class="bi bi-people-fill"></i> Usuários Online</h5>
+              <div class="card-header-actions">
+                <button id="refreshBtn" class="btn" style="padding: 4px 8px; background-color: rgba(255, 255, 255, 0.2);">
+                    <i class="bi bi-arrow-clockwise"></i> Atualizar
+                </button>
+                <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+              </div>
+          </div>
+          <div class="card-body">
+              <div class="table-responsive">
+                  <table id="onlineUsersTable">
+                      <thead>
+                          <tr>
+                              <th>Usuário</th>
+                              <th>IP</th>
+                              <th>MAC</th>
+                              <th>Tempo Online</th>
+                              <th>Download (MB)</th>
+                              <th>Upload (MB)</th>
+                              <th>Total (MB)</th>
+                          </tr>
+                      </thead>
+                      <tbody>
+                          {% for user in online_users %}
+                          <tr>
+                              <td>{{ user.get('user', 'N/A') }}</td>
+                              <td>{{ user.get('address', 'N/A') }}</td>
+                              <td>{{ user.get('mac-address', 'N/A') }}</td>
+                              <td>{{ user.get('uptime', 'N/A') }}</td>
+                              <td>{{ (user.get('bytes-in', 0) | int / 1024 / 1024) | round(2) }}</td>
+                              <td>{{ (user.get('bytes-out', 0) | int / 1024 / 1024) | round(2) }}</td>
+                              <td>{{ ((user.get('bytes-in', 0) | int + user.get('bytes-out', 0) | int) / 1024 / 1024) | round(2) }}</td>
+                          </tr>
+                          {% else %}
+                          <tr>
+                              <td colspan="7" style="text-align: center;">Nenhum usuário online</td>
+                          </tr>
+                          {% endfor %}
+                      </tbody>
+                  </table>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="row fade-in" style="animation-delay: 0.2s;">
+  <div class="col-md-6 mb-4 dashboard-widget" data-widget-id="top-users-chart">
+      <div class="card">
+          <div class="card-header bg-success">
+              <h5><i class="bi bi-bar-chart-fill"></i> Top 5 Usuários por Consumo</h5>
+              <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+          </div>
+          <div class="card-body">
+              <div class="chart-container">
+                <img src="data:image/png;base64,{{ daily_chart }}" class="img-fluid" alt="Consumo Diário">
+              </div>
+              <div class="chart-type-selector" style="display: none;">
+                <select class="form-control chart-type">
+                  <option value="bar">Gráfico de Barras</option>
+                  <option value="pie">Gráfico de Pizza</option>
+                  <option value="line">Gráfico de Linha</option>
+                </select>
+              </div>
+          </div>
+      </div>
+  </div>
+  <div class="col-md-6 mb-4 dashboard-widget" data-widget-id="usage-distribution">
+      <div class="card">
+          <div class="card-header bg-info">
+              <h5><i class="bi bi-pie-chart-fill"></i> Distribuição de Consumo</h5>
+              <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+          </div>
+          <div class="card-body">
+              <div class="chart-container">
+                <img src="data:image/png;base64,{{ pie_chart }}" class="img-fluid" alt="Distribuição de Consumo">
+              </div>
+              <div class="chart-type-selector" style="display: none;">
+                <select class="form-control chart-type">
+                  <option value="pie">Gráfico de Pizza</option>
+                  <option value="bar">Gráfico de Barras</option>
+                  <option value="line">Gráfico de Linha</option>
+                </select>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="row fade-in dashboard-widget" data-widget-id="weekly-trend" style="animation-delay: 0.3s;">
+  <div class="col-12 mb-4">
+      <div class="card">
+          <div class="card-header bg-warning">
+              <h5><i class="bi bi-graph-up"></i> Tendência de Consumo Semanal</h5>
+              <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+          </div>
+          <div class="card-body">
+              <div class="chart-container">
+                <img src="data:image/png;base64,{{ weekly_chart }}" class="img-fluid" alt="Tendência Semanal">
+              </div>
+              <div class="chart-type-selector" style="display: none;">
+                <select class="form-control chart-type">
+                  <option value="line">Gráfico de Linha</option>
+                  <option value="bar">Gráfico de Barras</option>
+                  <option value="area">Gráfico de Área</option>
+                </select>
+              </div>
+          </div>
+      </div>
+  </div>
+</div>
+
+<div class="row fade-in dashboard-widget" data-widget-id="realtime-usage" style="animation-delay: 0.4s;">
+  <div class="col-12 mb-4">
+      <div class="card">
+          <div class="card-header bg-primary">
+              <h5><i class="bi bi-speedometer2"></i> Consumo em Tempo Real</h5>
+              <div class="widget-handle" style="display: none;"><i class="bi bi-grip-vertical"></i></div>
+          </div>
+          <div class="card-body">
+              <canvas id="realTimeChart" height="100"></canvas>
+          </div>
+      </div>
+  </div>
+</div>
+
+<!-- Área de notificações -->
+<div id="notification-area" class="position-fixed bottom-0 end-0 p-3" style="z-index: 1050;"></div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.14.0/Sortable.min.js"></script>
+<script>
+  // Função para atualizar a tabela de usuários online
+  function updateOnlineUsers() {
+      fetch('/api/usage')
+          .then(response => response.json())
+          .then(data => {
+              const tableBody = document.querySelector('#onlineUsersTable tbody');
+              
+              if (data.error) {
+                  console.error(data.error);
+                  return;
+              }
+              
+              if (data.length === 0) {
+                  tableBody.innerHTML = '<tr><td colspan="7" style="text-align: center;">Nenhum usuário online</td></tr>';
+                  return;
+              }
+              
+              let tableContent = '';
+              data.forEach(user => {
+                  tableContent += `
+                      <tr>
+                          <td>${user.username}</td>
+                          <td>-</td>
+                          <td>-</td>
+                          <td>-</td>
+                          <td>${user.download}</td>
+                          <td>${user.upload}</td>
+                          <td>${user.total}</td>
+                      </tr>
+                  `;
+              });
+              
+              tableBody.innerHTML = tableContent;
+          })
+          .catch(error => console.error('Erro ao atualizar usuários online:', error));
+  }
+  
+  // Atualizar a cada 10 segundos
+  setInterval(updateOnlineUsers, 10000);
+  
+  // Botão de atualização manual
+  document.getElementById('refreshBtn').addEventListener('click', function() {
+      this.classList.add('rotate-animation');
+      updateOnlineUsers();
+      setTimeout(() => {
+          this.classList.remove('rotate-animation');
+          location.reload();
+      }, 500);
+  });
+  
+  // Gráfico em tempo real
+  let realTimeChart;
+  
+  function initRealTimeChart() {
+      const ctx = document.getElementById('realTimeChart').getContext('2d');
+      
+      // Obter o tema atual
+      const currentTheme = document.documentElement.getAttribute('data-theme') || 'light';
+      const gridColor = currentTheme === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+      const textColor = currentTheme === 'dark' ? '#e5e7eb' : '#374151';
+      
+      realTimeChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+              labels: [],
+              datasets: [{
+                  label: 'Consumo Total (MB)',
+                  data: [],
+                  borderColor: 'rgba(24, 119, 242, 1)',
+                  backgroundColor: 'rgba(24, 119, 242, 0.2)',
+                  borderWidth: 2,
+                  tension: 0.4,
+                  fill: true
+              }]
+          },
+          options: {
+              responsive: true,
+              maintainAspectRatio: false,
+              animation: {
+                  duration: 1000,
+                  easing: 'easeOutQuart'
+              },
+              plugins: {
+                  legend: {
+                      position: 'top',
+                      labels: {
+                          color: textColor
+                      }
+                  },
+                  title: {
+                      display: true,
+                      text: 'Monitoramento de Tráfego em Tempo Real',
+                      color: textColor
+                  },
+                  tooltip: {
+                      mode: 'index',
+                      intersect: false,
+                      backgroundColor: currentTheme === 'dark' ? '#374151' : 'rgba(255, 255, 255, 0.9)',
+                      titleColor: currentTheme === 'dark' ? '#e5e7eb' : '#374151',
+                      bodyColor: currentTheme === 'dark' ? '#e5e7eb' : '#374151',
+                      borderColor: currentTheme === 'dark' ? '#4b5563' : '#e5e7eb',
+                      borderWidth: 1
+                  }
+              },
+              scales: {
+                  y: {
+                      beginAtZero: true,
+                      title: {
+                          display: true,
+                          text: 'Consumo (MB)',
+                          color: textColor
+                      },
+                      grid: {
+                          color: gridColor
+                      },
+                      ticks: {
+                          color: textColor
+                      }
+                  },
+                  x: {
+                      title: {
+                          display: true,
+                          text: 'Tempo',
+                          color: textColor
+                      },
+                      grid: {
+                          color: gridColor
+                      },
+                      ticks: {
+                          color: textColor
+                      }
+                  }
+              }
+          }
+      });
+  }
+  
+  function updateRealTimeChart() {
+      fetch('/api/usage')
+          .then(response => response.json())
+          .then(data => {
+              if (data.error) {
+                  console.error(data.error);
+                  return;
+              }
+              
+              // Calcular consumo total
+              let totalConsumption = 0;
+              data.forEach(user => {
+                  totalConsumption += user.total;
+              });
+              
+              // Adicionar timestamp atual
+              const now = new Date();
+              const timeLabel = now.getHours() + ':' + 
+                               (now.getMinutes() < 10 ? '0' : '') + now.getMinutes() + ':' + 
+                               (now.getSeconds() < 10 ? '0' : '') + now.getSeconds();
+              
+              // Limitar a 20 pontos no gráfico
+              if (realTimeChart.data.labels.length > 20) {
+                  realTimeChart.data.labels.shift();
+                  realTimeChart.data.datasets[0].data.shift();
+              }
+              
+              realTimeChart.data.labels.push(timeLabel);
+              realTimeChart.data.datasets[0].data.push(totalConsumption);
+              realTimeChart.update();
+          })
+          .catch(error => console.error('Erro ao atualizar gráfico em tempo real:', error));
+  }
+  
+  // Sistema de notificações
+  function showNotification(message, type = 'info') {
+      const notificationArea = document.getElementById('notification-area');
+      const notification = document.createElement('div');
+      notification.className = `notification ${type}`;
+      notification.innerHTML = `
+          <div class="notification-icon">
+              <i class="bi ${type === 'success' ? 'bi-check-circle' : type === 'warning' ? 'bi-exclamation-triangle' : type === 'danger' ? 'bi-x-circle' : 'bi-info-circle'}"></i>
+          </div>
+          <div class="notification-content">
+              ${message}
+          </div>
+          <button class="notification-close">&times;</button>
+      `;
+      
+      notificationArea.appendChild(notification);
+      
+      // Animar entrada
+      setTimeout(() => {
+          notification.classList.add('show');
+      }, 10);
+      
+      // Auto-fechar após 5 segundos
+      const timeout = setTimeout(() => {
+          closeNotification(notification);
+      }, 5000);
+      
+      // Botão de fechar
+      notification.querySelector('.notification-close').addEventListener('click', () => {
+          clearTimeout(timeout);
+          closeNotification(notification);
+      });
+      
+      // Pausar o timeout ao passar o mouse
+      notification.addEventListener('mouseenter', () => {
+          clearTimeout(timeout);
+      });
+      
+      // Reiniciar o timeout ao tirar o mouse
+      notification.addEventListener('mouseleave', () => {
+          const newTimeout = setTimeout(() => {
+              closeNotification(notification);
+          }, 3000);
+      });
+  }
+  
+  function closeNotification(notification) {
+      notification.classList.remove('show');
+      setTimeout(() => {
+          notification.remove();
+      }, 300);
+  }
+  
+  // Dashboard personalizável
+  document.addEventListener('DOMContentLoaded', function() {
+      // Inicializar gráfico e atualizar a cada 5 segundos
+      initRealTimeChart();
+      updateRealTimeChart();
+      setInterval(updateRealTimeChart, 5000);
+      
+      // Atualizar o gráfico quando o tema mudar
+      document.getElementById('theme-toggle').addEventListener('click', function() {
+          // Dar tempo para o tema mudar
+          setTimeout(() => {
+              // Destruir o gráfico atual
+              realTimeChart.destroy();
+              // Reinicializar com as novas cores
+              initRealTimeChart();
+              // Atualizar dados
+              updateRealTimeChart();
+          }, 100);
+      });
+      
+      // Carregar layout salvo
+      loadDashboardLayout();
+      
+      // Botão para personalizar dashboard
+      document.getElementById('customize-dashboard').addEventListener('click', function() {
+          enableDashboardCustomization();
+      });
+      
+      // Botão para salvar layout
+      document.getElementById('save-layout').addEventListener('click', function() {
+          saveDashboardLayout();
+          disableDashboardCustomization();
+      });
+      
+      // Botão para resetar layout
+      document.getElementById('reset-layout').addEventListener('click', function() {
+          resetDashboardLayout();
+      });
+      
+      // Mostrar notificação de boas-vindas
+      setTimeout(() => {
+          showNotification('Bem-vindo ao Dashboard! Você pode personalizar este painel clicando em "Personalizar Dashboard".', 'info');
+      }, 1000);
+      
+      // Verificar se há usuários próximos ao limite
+      checkUsersNearLimit();
+      
+      // Atualizar dados em segundo plano após o carregamento da página
+      setTimeout(() => {
+          updateDataInBackground();
+      }, 2000);
+  });
+
+  // Função para atualizar dados em segundo plano
+  function updateDataInBackground() {
+      showNotification('Atualizando dados em segundo plano...', 'info');
+      
+      fetch('/api/update-data', {
+          method: 'POST',
+          headers: {
+              'Content-Type': 'application/json',
+          }
+      })
+      .then(response => response.json())
+      .then(data => {
+          if (data.success) {
+              showNotification('Dados atualizados com sucesso!', 'success');
+              // Atualizar a tabela de usuários online
+              updateOnlineUsers();
+              // Atualizar o gráfico em tempo real
+              updateRealTimeChart();
+          } else {
+              showNotification('Erro ao atualizar dados: ' + data.message, 'danger');
+          }
+      })
+      .catch(error => {
+          console.error('Erro ao atualizar dados:', error);
+          showNotification('Erro ao atualizar dados. Verifique o console para mais detalhes.', 'danger');
+      });
+  }
+</script>
+
+<style>
+  @keyframes rotate {
+      from {
+          transform: rotate(0deg);
+      }
+      to {
+          transform: rotate(360deg);
+      }
+  }
+  
+  .rotate-animation {
+      animation: rotate 0.5s linear;
+  }
+  
+  /* Estilos para dashboard personalizável */
+  .dashboard-controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+  }
+  
+  .dashboard-widget {
+      transition: all 0.3s ease;
+  }
+  
+  .dashboard-widget.customizing {
+      border: 2px dashed var(--primary-color);
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: var(--border-radius);
+      cursor: move;
+  }
+  
+  .widget-ghost {
+      opacity: 0.5;
+      background: var(--primary-color);
+  }
+  
+  .widget-handle {
+      cursor: move;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px;
+      color: rgba(255, 255, 255, 0.7);
+  }
+  
+  .widget-handle:hover {
+      color: white;
+  }
+  
+  .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+  }
+  
+  .card-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+  }
+  
+  .chart-type-selector {
+      margin-top: 10px;
+      padding: 5px;
+      background-color: rgba(0, 0, 0, 0.05);
+      border-radius: var(--border-radius);
+  }
+  
+  [data-theme="dark"] .chart-type-selector {
+      background-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  /* Estilos para notificações */
+  .notification {
+      display: flex;
+      align-items: center;
+      background-color: white;
+      border-left: 4px solid var(--info-color);
+      box-shadow: var(--shadow-md);
+      padding: 12px 15px;
+      margin-bottom: 10px;
+      border-radius: var(--border-radius);
+      max-width: 400px;
+      transform: translateX(120%);
+      transition: transform 0.3s ease;
+      position: relative;
+  }
+  
+  [data-theme="dark"] .notification {
+      background-color: var(--gray-800);
+      color: white;
+  }
+  
+  .notification.show {
+      transform: translateX(0);
+  }
+  
+  .notification.success {
+      border-left-color: var(--success-color);
+  }
+  
+  .notification.warning {
+      border-left-color: var(--warning-color);
+  }
+  
+  .notification.danger {
+      border-left-color: var(--danger-color);
+  }
+  
+  .notification-icon {
+      margin-right: 12px;
+      font-size: 1.25rem;
+  }
+  
+  .notification.info .notification-icon {
+      color: var(--info-color);
+  }
+  
+  .notification.success .notification-icon {
+      color: var(--success-color);
+  }
+  
+  .notification.warning .notification-icon {
+      color: var(--warning-color);
+  }
+  
+  .notification.danger .notification-icon {
+      color: var(--danger-color);
+  }
+  
+  .notification-content {
+      flex: 1;
+      font-size: 0.9rem;
+  }
+  
+  .notification-close {
+      background: none;
+      border: none;
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+      opacity: 0.5;
+      transition: opacity 0.2s;
+      padding: 0;
+      margin-left: 10px;
+  }
+  
+  .notification-close:hover {
+      opacity: 1;
+  }
+</style>
+{% endblock %}

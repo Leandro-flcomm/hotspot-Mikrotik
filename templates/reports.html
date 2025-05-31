@@ -1,0 +1,319 @@
+{% extends 'base.html' %}
+
+{% block page_title %}Relatórios de Consumo{% endblock %}
+
+{% block head %}
+<!-- Adicionar biblioteca jsPDF para exportação de PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+<script src="{{ url_for('static', filename='js/pdf-export.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<div class="row mb-4 fade-in">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-primary">
+                <h5><i class="bi bi-funnel"></i> Filtros</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert info mb-3">
+                    <i class="bi bi-info-circle"></i> Os relatórios incluem dados de sessões atuais e históricas do MikroTik. Limite diário: <strong>{{ daily_limit }} MB</strong>
+                </div>
+                <form method="GET" action="{{ url_for('reports') }}" class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="period" class="form-label">Período</label>
+                        <select name="period" id="period" class="form-control">
+                            <option value="day" {% if period == 'day' %}selected{% endif %}>Diário</option>
+                            <option value="week" {% if period == 'week' %}selected{% endif %}>Semanal</option>
+                            <option value="month" {% if period == 'month' %}selected{% endif %}>Mensal</option>
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label for="username" class="form-label">Usuário</label>
+                        <select name="username" id="username" class="form-control">
+                            <option value="">Todos os usuários</option>
+                            {% for user in users %}
+                                <option value="{{ user }}" {% if selected_user == user %}selected{% endif %}>{{ user }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="col-md-4 mb-3">
+                        <label class="form-label">&nbsp;</label>
+                        <button type="submit" class="btn form-control">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row fade-in" style="animation-delay: 0.1s;">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary">
+                <h5><i class="bi bi-table"></i> Tabela de Consumo</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="consumption-table">
+                        <thead>
+                            <tr>
+                                <th>Usuário</th>
+                                <th>Download (MB) <small class="text-muted">(recebido pelo usuário)</small></th>
+                                <th>Upload (MB) <small class="text-muted">(enviado pelo usuário)</small></th>
+                                <th>Total (MB)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if table_data %}
+                                {% for user in table_data %}
+                                <tr {% if user.total >= daily_limit %}class="limit-reached"{% elif user.total >= daily_limit * 0.8 %}class="approaching-limit"{% endif %}>
+                                    <td>{{ user.username }}</td>
+                                    <td>{{ user.download }}</td>
+                                    <td>{{ user.upload }}</td>
+                                    <td>{{ user.total }}</td>
+                                    <td>
+                                        {% if user.total >= daily_limit %}
+                                            <span class="badge bg-danger">Limite atingido</span>
+                                        {% elif user.total >= daily_limit * 0.8 %}
+                                            <span class="badge bg-warning">Próximo ao limite</span>
+                                        {% else %}
+                                            <span class="badge bg-success">Normal</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center">Nenhum dado de consumo encontrado para o período selecionado.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                        <tfoot>
+                            <tr>
+                                <th>Total</th>
+                                <th>{{ table_data|sum(attribute='download')|round(2) }} MB</th>
+                                <th>{{ table_data|sum(attribute='upload')|round(2) }} MB</th>
+                                <th>{{ table_data|sum(attribute='total')|round(2) }} MB</th>
+                                <th class="report-date">{{ now.strftime('%d/%m/%Y') }}</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row fade-in" style="animation-delay: 0.2s;">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-success">
+                <h5><i class="bi bi-graph-up"></i> Gráfico de Consumo</h5>
+            </div>
+            <div class="card-body">
+                <img src="data:image/png;base64,{{ chart }}" class="img-fluid" alt="Gráfico de Consumo">
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Nova seção para consumo por data -->
+<div class="row fade-in" style="animation-delay: 0.25s;">
+    <div class="col-md-12 mb-4">
+        <div class="card">
+            <div class="card-header bg-info">
+                <h5><i class="bi bi-calendar-date"></i> Consumo por Data</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table id="consumption-by-date-table">
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Download (MB)</th>
+                                <th>Upload (MB)</th>
+                                <th>Total (MB)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if date_data %}
+                                {% for date_item in date_data %}
+                                <tr>
+                                    <td>{{ date_item.date }}</td>
+                                    <td>{{ date_item.download }}</td>
+                                    <td>{{ date_item.upload }}</td>
+                                    <td>{{ date_item.total }}</td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center">Nenhum dado de consumo por data disponível.</td>
+                                </tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Elemento oculto para armazenar dados do gráfico para exportação -->
+<div id="chart-data" data-values='{{ date_data_json }}' style="display: none;"></div>
+
+<div class="row fade-in" style="animation-delay: 0.3s;">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header bg-info">
+                <h5><i class="bi bi-file-earmark"></i> Exportar Relatório</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex justify-content-center gap-3">
+                    <button class="btn btn-csv" id="exportCSV" style="width: auto;">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Exportar para CSV
+                    </button>
+                    <button class="btn btn-pdf" id="exportPDF" style="width: auto;">
+                        <i class="bi bi-file-earmark-pdf"></i> Exportar para PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .badge {
+        display: inline-block;
+        padding: 0.25em 0.6em;
+        font-size: 75%;
+        font-weight: 700;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 0.25rem;
+    }
+    
+    .bg-success {
+        background-color: var(--success-color);
+        color: white;
+    }
+    
+    .bg-danger {
+        background-color: var(--danger-color);
+        color: white;
+    }
+    
+    .bg-warning {
+        background-color: var(--warning-color);
+        color: white;
+    }
+    
+    .text-center {
+        text-align: center;
+    }
+    
+    .limit-reached {
+        background-color: rgba(240, 82, 82, 0.1);
+    }
+    
+    .approaching-limit {
+        background-color: rgba(255, 90, 31, 0.1);
+    }
+</style>
+
+<script>
+    document.getElementById('exportCSV').addEventListener('click', function() {
+        // Função para exportar a tabela para CSV
+        const table = document.querySelector('#consumption-table');
+        let csv = [];
+        const rows = table.querySelectorAll('tr');
+        
+        for (let i = 0; i < rows.length; i++) {
+            const row = [], cols = rows[i].querySelectorAll('td, th');
+            
+            for (let j = 0; j < cols.length; j++) {
+                // Limpar o texto (remover espaços extras e texto de small)
+                let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, ' ').trim();
+                // Remover texto entre parênteses (explicações)
+                data = data.replace(/$$[^)]*$$/g, '').trim();
+                // Escapar aspas duplas
+                data = data.replace(/"/g, '""');
+                // Adicionar aspas duplas ao redor de cada campo
+                row.push('"' + data + '"');
+            }
+            csv.push(row.join(','));
+        }
+        
+        // Adicionar dados de consumo por data
+        const dateTable = document.querySelector('#consumption-by-date-table');
+        if (dateTable) {
+            // Adicionar uma linha em branco como separador
+            csv.push('');
+            // Adicionar título da seção
+            csv.push('"Consumo por Data"');
+            
+            const dateRows = dateTable.querySelectorAll('tr');
+            for (let i = 0; i < dateRows.length; i++) {
+                const row = [], cols = dateRows[i].querySelectorAll('td, th');
+                
+                for (let j = 0; j < cols.length; j++) {
+                    let data = cols[j].innerText.replace(/(\r\n|\n|\r)/gm, ' ').trim();
+                    data = data.replace(/"/g, '""');
+                    row.push('"' + data + '"');
+                }
+                csv.push(row.join(','));
+            }
+        }
+        
+        // Baixar o arquivo CSV
+        const csvString = csv.join('\n');
+        const period = document.getElementById('period').value;
+        const username = document.getElementById('username').value;
+        const userText = username ? `_${username}` : '';
+        const filename = `relatorio_consumo_${period}${userText}_${new Date().toISOString().slice(0, 10)}.csv`;
+        
+        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        
+        if (navigator.msSaveBlob) { // IE 10+
+            navigator.msSaveBlob(blob, filename);
+        } else {
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    });
+    
+    document.getElementById('exportPDF').addEventListener('click', function() {
+        // Obter o período selecionado
+        const period = document.getElementById('period').value;
+        let periodText = 'Diário';
+        if (period === 'week') periodText = 'Semanal';
+        if (period === 'month') periodText = 'Mensal';
+        
+        // Obter o usuário selecionado
+        const username = document.getElementById('username').value;
+        const userText = username ? ` - Usuário: ${username}` : '';
+        
+        // Título do relatório
+        const title = `Relatório de Consumo ${periodText}${userText}`;
+        
+        // Exportar para PDF
+        exportToPDF('consumption-table', title);
+    });
+</script>
+{% endblock %}
